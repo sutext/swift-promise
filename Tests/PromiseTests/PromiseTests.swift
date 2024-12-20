@@ -1,13 +1,12 @@
-# swift-promise
+import Testing
+import Dispatch
+@testable import Promise
 
-### Introduce
-- A pattern of asynchronous programming
-- Look at `Javascript` `Promise`  for design ideas
-- It is mainly used when an asynchronous return value is required
+enum E:Error{
+    case message(String)
+}
 
-### Useage
-
-```swift
+@Test func example() async throws {
 
     let promise = Promise { resolve, reject in
         DispatchQueue.global().asyncAfter(deadline: .now()+5){
@@ -44,5 +43,4 @@
         })
         .wait()
     print("value:",v)
-
-```
+}
