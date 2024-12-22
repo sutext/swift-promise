@@ -5,28 +5,30 @@
 //  Created by supertext on 2024/12/20.
 //
 
-
+///
+/// A usefull callback chains
+/// Add any callback you want, and run it some times.
+///
 @usableFromInline
-internal struct Callbacks: Sendable {
+struct Callbacks: Sendable {
     @usableFromInline
-    internal typealias Element = @Sendable () -> Callbacks
+    typealias Element = @Sendable () -> Callbacks
     @usableFromInline
-    internal var first: Element?
+    var first: Element?
     @usableFromInline
-    internal var furthers: [Element]?
-    internal static func empty()->Callbacks{ .init() }
+    var furthers: [Element]?
     @inlinable
-    internal init() {
+    init() {
         self.first = nil
         self.furthers = nil
     }
     @inlinable
-    internal init(_ ele:@escaping Element) {
+    init(_ ele:@escaping Element) {
         self.first = ele
         self.furthers = nil
     }
     @inlinable
-    internal mutating func append(_ callback: @escaping Element) {
+    mutating func append(_ callback: @escaping Element) {
         if self.first == nil {
             self.first = callback
         } else {
@@ -38,7 +40,7 @@ internal struct Callbacks: Sendable {
         }
     }
     @inlinable
-    internal func all() -> ArraySlice<Element> {
+    func all() -> ArraySlice<Element> {
         switch (self.first, self.furthers) {
         case (.none, _):
             return []
@@ -51,7 +53,7 @@ internal struct Callbacks: Sendable {
         }
     }
     @inlinable
-    internal func putAll(into array: inout ArraySlice<Element>) {
+    func putAll(into array: inout ArraySlice<Element>) {
         switch (self.first, self.furthers) {
         case (.none, _):
             return
@@ -64,7 +66,7 @@ internal struct Callbacks: Sendable {
         }
     }
     @inlinable
-    internal func run() {
+    func run() {
         switch (self.first, self.furthers) {
         case (.none, _):
             return

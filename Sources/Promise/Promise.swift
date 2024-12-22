@@ -5,15 +5,25 @@
 //  Created by supertext on 2024/12/19.
 //
 
+import Foundation
+
 ///
-/// A pattern of asynchronous programming
-/// Look at `Javascript` `Promise`  for design ideas
-/// It is mainly used when an asynchronous return value is required
+/// - A pattern of asynchronous programming
+/// - Look at `Javascript` `Promise`  for design ideas
+/// - It is mainly used when an asynchronous return value is required
+/// - Internally, we make it thread-safe, so we mark it  `@unchecked Sendable`
 ///
-public final class Promise<Value:Sendable>:@unchecked Sendable{
+final public class Promise<Value:Sendable>: @unchecked Sendable{
     private var result:Result<Value,Error>?
+    private let lock = NSLock()
     var callbacks:Callbacks = Callbacks()
     
+    /// The promise has been done or not
+    public var isDone:Bool {
+        lock.lock()
+        defer { lock.unlock() }
+        return self.result != nil
+    }
     ///
     /// Create a promise with no resolver or reject
     ///
@@ -37,12 +47,6 @@ public final class Promise<Value:Sendable>:@unchecked Sendable{
     
     /// This is the recommended constructor
     ///
-    /// - Parameters:
-    ///    - initFunc: The init func which well be call immediately
-    ///
-    /// - Examples:
-    ///
-    ///
     ///     func someAsyncMethod(value:Int)->Promise<Int>{
     ///        return Promise { resolve, reject in
     ///            DispatchQueue.global().asyncAfter(deadline: .now()+5){
@@ -65,7 +69,10 @@ public final class Promise<Value:Sendable>:@unchecked Sendable{
     ///     let value = try await someAsyncMethod(5).wait()
     ///     print(value)
     ///
-    public init(_ initFunc:@escaping @Sendable (@escaping @Sendable (Value)->Void,@escaping @Sendable (Error)->Void)->Void){
+    /// - Parameters:
+    ///    - initFunc: The init func which well be call immediately
+    ///
+    public init(_ initFunc:@escaping @Sendable (@escaping @Sendable (Value) -> Void,@escaping @Sendable (Error) -> Void) -> Void){
         initFunc ({ v in
             self.done(v)
         },{ e in
@@ -74,18 +81,25 @@ public final class Promise<Value:Sendable>:@unchecked Sendable{
     }
     ///
     /// Issue a completion signal indicating that the Promise has been completed with an error
+    /// It has no effect when repeated
     ///
     public func done(_ error:Error){
         self.done(.failure(error))
     }
     ///
     /// Issue a completion signal indicating that the Promise has been completed with an value
+    /// It has no effect when repeated
     ///
     public func done(_ value:Value){
         self.done(.success(value))
     }
     
+    ///
+    /// It has no effect when repeated calls.
+    ///
     private func done(_ result:Result<Value,Error>?){
+        lock.lock()
+        defer { lock.unlock() }
         if self.result == nil{
             self.result = result
             self.callbacks.run()
@@ -93,22 +107,19 @@ public final class Promise<Value:Sendable>:@unchecked Sendable{
         }
     }
     private func withFinish(callback:@escaping Callbacks.Element){
-        self.addCallback(callback).run()
-    }
-    private func addCallback(_ callback:@escaping Callbacks.Element)->Callbacks{
+        lock.lock()
+        defer { lock.unlock() }
         if self.result == nil{
             self.callbacks.append(callback)
-            return .empty()
+        }else{
+            callback().run()
         }
-        return callback()
     }
 }
 
 extension Promise{
     ///
     /// Process success value or failure error after promise comleted
-    ///
-    /// - Returns: A new value type promise
     ///
     ///     let promise = Promise<Int>()
     ///     promise.map{v in
@@ -123,21 +134,57 @@ extension Promise{
     ///         print(err)
     ///     }
     ///
+    /// - Parameters:
+    ///   - handler: The  handler  after some  result returned. Both success and failure are included
+    ///
+    /// - Returns: The next promise in the chain
+    ///
     @discardableResult
-    public func map<Other:Sendable>(_ block:@escaping @Sendable (Result<Value,Error>)->Result<Other,Error> )->Promise<Other>{
+    public func map<Other:Sendable>(_ handle:@escaping @Sendable (Result<Value,Error>) -> Result<Other,Error> ) -> Promise<Other>{
         let next = Promise<Other>()
         self.withFinish {
-            next.done(block(self.result!))
-            return .empty()
+            next.done(handle(self.result!))
+            return .init()
         }
         return next
     }
     
     ///
-    /// Process success value after promise comleted
-    /// Like `map(_:)` but only process success value only
+    /// Process success value or failure error after promise comleted
     ///
-    /// - Returns: A new value type promise
+    ///     let promise = Promise<Int>()
+    ///     promise.map{v in
+    ///         if _ {
+    ///             return .success("\(v*v*v)")
+    ///         }else{
+    ///             return .failure(some error)
+    ///         }
+    ///     }.then{ v in
+    ///         print(v)
+    ///     }.catch{ err in
+    ///         print(err)
+    ///     }
+    ///
+    /// - Parameters:
+    ///   - handler: The  handler  after some  result returned. Both success and failure are included
+    ///
+    /// - Returns: The next promise in the chain
+    ///
+    @discardableResult
+    public func map<Other:Sendable>(_ handle:@escaping @Sendable (Result<Value,Error>) -> Promise<Other>) -> Promise<Other>{
+        let next = Promise<Other>()
+        self.withFinish {
+            handle(self.result!).map { r in
+                next.done(r)
+                return r
+            }
+            return .init()
+        }
+        return next
+    }
+    ///
+    /// Process success value after promise comleted
+    /// Be akin to `map(_:)` but process success value only
     ///
     ///     let promise = Promise<Int>()
     ///     promise..then{ v in
@@ -147,13 +194,18 @@ extension Promise{
     ///         print(err)
     ///     }
     ///
+    /// - Parameters:
+    ///    - handler: The  value handler  after success value and retrun an other value
+    ///
+    /// - Returns: The next promise in the chain
+    ///
     @discardableResult
-    public func then<Other:Sendable>(_ block:@escaping @Sendable (Value) throws -> Other ) -> Promise<Other>{
+    public func then<Other:Sendable>(_ handler:@escaping @Sendable (Value) throws -> Other ) -> Promise<Other>{
         self.map { r in
             switch r {
             case .success(let v):
                 do {
-                    return .success(try block(v))
+                    return .success(try handler(v))
                 }catch{
                     return .failure(error)
                 }
@@ -162,12 +214,42 @@ extension Promise{
             }
         }
     }
+    ///
+    /// Process success value after promise comleted
+    /// Be akin to `map(_:)` but process success value only
+    ///
+    ///     let promise = Promise<Int>()
+    ///     promise..then{ v in
+    ///         print(v)
+    ///         return Promise(v*v)
+    ///     }.catch{ err in
+    ///         print(err)
+    ///     }
+    ///
+    /// - Parameters:
+    ///    - handler: The  value handler  after success value and retrun an other promise
+    ///
+    /// - Returns: The next promise in the chain
+    ///
+    @discardableResult
+    public func then<Other:Sendable>(_ handler:@escaping @Sendable (Value)throws -> Promise<Other> ) -> Promise<Other>{
+        self.map { r in
+            switch r {
+            case .success(let v):
+                do{
+                    return try handler(v)
+                }catch{
+                    return Promise<Other>(error)
+                }
+            case .failure(let err):
+                return Promise<Other>(err)
+            }
+        }
+    }
     
     ///
-    /// Process failure error after promise comleted
-    /// Like `map(_:)` but only process failure error only
-    ///
-    /// - Returns: A new value type promise
+    /// Process failure error after promise comleted.
+    /// Be akin to `map(_:)` but process failure error only
     ///
     ///     let promise = Promise<Int>().then{ v in
     ///         print(v)
@@ -185,51 +267,59 @@ extension Promise{
     ///     ///after some time
     ///     promise.done(some error)
     ///
+    /// - Parameters:
+    ///    - handler: The error handler when some error
+    ///
+    /// - Returns: The next promise in the chain
+    ///
+    
     @discardableResult
-    public func `catch`(_ block:@escaping @Sendable (Error)throws -> Any? ) -> Promise<Value>{
-        self.map { r in
-            switch r {
-            case .success(let v):
-                return .success(v)
-            case .failure(let err):
-                do {
-                    if let value = try block(err){
-                        switch value{
-                        case let v as Value:      // got new value, resolve it
-                            return .success(v)
-                        case let error as Error:  // got new error, trhow it
-                            return .failure(error)
-                        case _ as Void:           // got void, keep orginal error
-                            return .failure(err)
-                        default:                  // got other value rethrow UnexpectType error
-                            return .failure(UnexpectType(type(of: value)))
-                        }
-                    }
-                    return .failure(err)
-                }catch{
-                    return .failure(error)
-                }
-            }
-        }
-    }
+       public func `catch`(_ block:@escaping @Sendable (Error)throws -> Any? ) -> Promise<Value>{
+           self.map { r in
+               switch r {
+               case .success(let v):
+                   return Promise<Value>(v)
+               case .failure(let err):
+                   do {
+                       if let value = try block(err){
+                           switch value{
+                           case let v as Value:      // got new value, resolve it
+                               return Promise<Value>(v)
+                           case let pro as Promise<Value>: // got other promise return it
+                               return pro
+                           case let error as Error:  // got new error, trhow it
+                               return Promise<Value>(error)
+                           case _ as Void:           // got void, keep orginal error
+                               return Promise<Value>(err)
+                           default:                  // got other value rethrow UnexpectType error
+                               return Promise<Value>(UnexpectType(type(of: value)))
+                           }
+                       }
+                       return Promise<Value>(err)
+                   }catch{
+                       return Promise<Value>(error)
+                   }
+               }
+           }
+       }
     
     ///
     /// This is where all the call chains end up
     ///
     ///     let promise = Promise<Int>()
     ///     promise.then{v in
-    ///
+    ///         return v.map { other v }
     ///     }.then{ v in
-    ///
+    ///         print(v)
     ///     }.finally{ result in
-    ///
+    ///         print(result)
     ///     }
     ///
     ///
     public func finally(_ block:@escaping @Sendable (Result<Value,Error>)->Void ){
         self.withFinish {
             block(self.result!)
-            return .empty()
+            return .init()
         }
     }
     
@@ -251,6 +341,8 @@ extension Promise{
     ///     let value = try await someAsyncMethod(5).wait()
     ///     print(value)
     ///
+    /// - Returns: A success value
+    /// - Throws: A failure error from anywhre
     ///
     public func wait() async throws ->Value{
         return try await withUnsafeThrowingContinuation { cont in
@@ -265,7 +357,8 @@ extension Promise{
     ///
     /// Occurs when an error is caught in `catch(_:)`
     ///
-    /// - Important: Such a error should neve be happened
+    /// - Important: In theory, such errors should not exist,
+    /// - Important: The developers need to ensure that the correct data type is returned after handling the prev error
     ///
     public struct UnexpectType:Error,CustomStringConvertible{
         private let type:Any.Type
@@ -273,7 +366,7 @@ extension Promise{
             self.type = type
         }
         public var description: String{
-            "UnexpectType(\(type),expect:\(Value.self))"
+            "UnexpectType(\(type),expect:\(Value.self) or \(Promise<Value>.self)"
         }
     }
 }
