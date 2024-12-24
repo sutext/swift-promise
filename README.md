@@ -52,43 +52,46 @@
 
 ```swift 
 
-@Sendable func request1(_ p:Int)->Promise<Int>{
-    return Promise{ resolve,reject in
-        DispatchQueue(label: "async task").asyncAfter(deadline: .now()+1){
-            if p == 100{
-                resolve(101)
-            }else{
-                reject(E.message("parameter error"))
+    @Sendable func request1(_ p:Int)->Promise<Int>{
+        return Promise{ resolve,reject in
+            DispatchQueue(label: "async task").asyncAfter(deadline: .now()+1){
+                if p == 100{
+                    resolve(101)
+                }else{
+                    reject(E.message("parameter error"))
+                }
             }
         }
     }
-}
-@Sendable func request2(_ p:Int)->Promise<Int>{
-    return Promise{ resolve,reject in
-        DispatchQueue(label: "async task").asyncAfter(deadline: .now()+2){
-            if p == 101{
-                resolve(102)
-            }else{
-                reject(E.message("parameter error"))
+    @Sendable func request2(_ p:Int)->Promise<Int>{
+        return Promise{ resolve,reject in
+            DispatchQueue(label: "async task").asyncAfter(deadline: .now()+2){
+                if p == 101{
+                    resolve(102)
+                }else{
+                    reject(E.message("parameter error"))
+                }
             }
         }
     }
-}
-@Sendable func request3(_ p:Int)->Promise<Int>{
-    return Promise{ resolve,reject in
-        DispatchQueue(label: "async task").asyncAfter(deadline: .now()+3){
-            if p == 102{
-                resolve(103)
-            }else{
-                reject(E.message("parameter error"))
+    @Sendable func request3(_ p:Int)->Promise<Int>{
+        return Promise{ resolve,reject in
+            DispatchQueue(label: "async task").asyncAfter(deadline: .now()+3){
+                if p == 102{
+                    resolve(103)
+                }else{
+                    reject(E.message("parameter error"))
+                }
             }
         }
     }
-}
 
-let v = try await request1(100).then(request2).then(request3).wait()
-print("value:",v)
-assert(v == 103)
+    let v = try await request1(100).then(request2).then(request3).wait()
+    print("value:",v)
+    assert(v == 103)
 
+    let values = try await PromiseAll(request0(), request0(), request0(), request0(), request0(),queue: .main).wait()
+    print(values)
+    assert(values == (100,100,100,100,100))
 
 ```

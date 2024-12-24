@@ -7,7 +7,7 @@ enum E:Error{
     case message(String)
 }
 
-@Test func example() async throws {
+@Test func test1() async throws {
     let t1:TimeInterval = Date.now.timeIntervalSince1970
     let promise = Promise { resolve, reject in
         DispatchQueue(label: "q1").asyncAfter(deadline: .now()+5){
@@ -26,7 +26,8 @@ enum E:Error{
     promise.then { i in
         print("first print:",i)
     }
-    let v = try await promise
+    let promise2 = Promise<Int>(3)
+    let v = try await promise2
         .then { i in
             if i%2 == 0{
                 return "\(i*i)"
@@ -73,7 +74,15 @@ enum E:Error{
     print("value:",v,"cost:",(t2-t1))
     assert(v == 100)
 }
-
+@Test func test2()async throws{
+    let promise = Promise { resolve, reject in
+        DispatchQueue(label: "q1").asyncAfter(deadline: .now()+5){
+            resolve(205)
+        }
+    }
+    let v = try await promise.wait()
+    print(v)
+}
 @Test func request()async throws{
     let p0 = request0()
     let v0 = try await p0.then(request1).wait()
@@ -82,6 +91,13 @@ enum E:Error{
     print("v0=",v0,"v1=",v1,"v2=",v2)
     assert(v2 == 103)
 }
+
+@Test func requestAll()async throws{
+    let values = try await PromiseAll(request0(), request0(), request0(), request0(), request0(),queue: .main).wait()
+    print(values)
+    assert(values == (100,100,100,100,100))
+}
+
 @Sendable func request0()->Promise<Int>{
     Promise{ resolve,reject in
         DispatchQueue(label: "async task").asyncAfter(deadline: .now()+0.5){

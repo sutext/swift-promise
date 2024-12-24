@@ -5,10 +5,8 @@
 //  Created by supertext on 2024/12/20.
 //
 
-///
 /// A usefull callback chains
 /// Add any callback you want, and run it some times.
-///
 @usableFromInline
 struct Callbacks: Sendable {
     @usableFromInline
