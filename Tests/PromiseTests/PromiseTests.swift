@@ -1,7 +1,7 @@
 import Testing
 import Dispatch
 import Foundation
-@testable import Promise
+import Promise
 
 enum E:Error{
     case message(String)
@@ -93,7 +93,7 @@ enum E:Error{
 }
 
 @Test func requestAll()async throws{
-    let values = try await PromiseAll(request0(), request0(), request0(), request0(), request0(),queue: .main).wait()
+    let values = try await PromiseAll(request0(), request0(), request0(), request0(), request0(),in: .main).wait()
     print(values)
     assert(values == (100,100,100,100,100))
 }

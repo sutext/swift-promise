@@ -16,7 +16,7 @@ import Foundation
 public func PromiseAll<V1,V2>(
     _ p1:Promise<V1>,
     _ p2:Promise<V2>,
-    queue:DispatchQueue? = nil)->Promise<(V1,V2)>{
+    in queue:DispatchQueue? = nil)->Promise<(V1,V2)>{
     let next = Promise<(V1,V2)>()
     Task{
         do{
@@ -39,7 +39,7 @@ public func PromiseAll<V1,V2,V3>(
     _ p1:Promise<V1>,
     _ p2:Promise<V2>,
     _ p3:Promise<V3>,
-    queue:DispatchQueue? = nil)->Promise<(V1,V2,V3)>{
+    in queue:DispatchQueue? = nil)->Promise<(V1,V2,V3)>{
     let next = Promise<(V1,V2,V3)>()
     Task{
         do{
@@ -65,7 +65,7 @@ public func PromiseAll<V1,V2,V3,V4>(
     _ p2:Promise<V2>,
     _ p3:Promise<V3>,
     _ p4:Promise<V4>,
-    queue:DispatchQueue? = nil)->Promise<(V1,V2,V3,V4)>{
+    in queue:DispatchQueue? = nil)->Promise<(V1,V2,V3,V4)>{
     let next = Promise<(V1,V2,V3,V4)>()
     Task{
         do{
@@ -93,7 +93,7 @@ public func PromiseAll<V1,V2,V3,V4,V5>(
     _ p3:Promise<V3>,
     _ p4:Promise<V4>,
     _ p5:Promise<V5>,
-    queue:DispatchQueue? = nil)->Promise<(V1,V2,V3,V4,V5)>{
+    in queue:DispatchQueue? = nil)->Promise<(V1,V2,V3,V4,V5)>{
     let next = Promise<(V1,V2,V3,V4,V5)>()
     Task{
         do{
@@ -123,7 +123,7 @@ public func PromiseAll<V1,V2,V3,V4,V5,V6>(
     _ p4:Promise<V4>,
     _ p5:Promise<V5>,
     _ p6:Promise<V6>,
-    queue:DispatchQueue? = nil)->Promise<(V1,V2,V3,V4,V5,V6)>{
+    in queue:DispatchQueue? = nil)->Promise<(V1,V2,V3,V4,V5,V6)>{
     let next = Promise<(V1,V2,V3,V4,V5,V6)>()
     Task{
         do{
@@ -155,7 +155,7 @@ public func PromiseAll<V1,V2,V3,V4,V5,V6,V7>(
     _ p5:Promise<V5>,
     _ p6:Promise<V6>,
     _ p7:Promise<V7>,
-    queue:DispatchQueue? = nil)->Promise<(V1,V2,V3,V4,V5,V6,V7)>{
+    in queue:DispatchQueue? = nil)->Promise<(V1,V2,V3,V4,V5,V6,V7)>{
     let next = Promise<(V1,V2,V3,V4,V5,V6,V7)>()
     Task{
         do{
@@ -189,7 +189,7 @@ public func PromiseAll<V1,V2,V3,V4,V5,V6,V7,V8>(
     _ p6:Promise<V6>,
     _ p7:Promise<V7>,
     _ p8:Promise<V8>,
-    queue:DispatchQueue? = nil)->Promise<(V1,V2,V3,V4,V5,V6,V7,V8)>{
+    in queue:DispatchQueue? = nil)->Promise<(V1,V2,V3,V4,V5,V6,V7,V8)>{
     let next = Promise<(V1,V2,V3,V4,V5,V6,V7,V8)>()
     Task{
         do{
