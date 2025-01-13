@@ -9,6 +9,7 @@ enum E:Error{
 
 @Test func test1() async throws {
     let t1:TimeInterval = Date.now.timeIntervalSince1970
+    
     let promise = Promise { resolve, reject in
         DispatchQueue(label: "q1").asyncAfter(deadline: .now()+5){
             resolve(205)
@@ -23,6 +24,7 @@ enum E:Error{
             resolve(207)
         }
     }
+    
     promise.then { i in
         print("first print:",i)
     }
@@ -48,12 +50,13 @@ enum E:Error{
             throw E.message("Transfer Error")
         }
         .then{ i in
+            ///
             return i + 1
         }
         .catch{ err in // print err and keep error
             return Promise{resolve,reject in
                 DispatchQueue(label: "q4").asyncAfter(deadline: .now()+5){
-                    resolve(100)
+                    resolve("100")
                 }
                 DispatchQueue(label: "q5").asyncAfter(deadline: .now()+5){
                     reject(err)

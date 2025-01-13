@@ -14,8 +14,7 @@ import Foundation
 /// - Internally, we make it thread-safe, so we mark it  `@unchecked Sendable`
 /// - The thread of the callback function depends on the thread of the `done(_:)` method call
 final public class Promise<Value:Sendable>: @unchecked Sendable{
-    
-    private let lock = NSLock()
+    private let lock = Lock()
     private var result:Result<Value,Error>?
     private var callbacks:Callbacks = Callbacks()
     /// The promise has been done or not
@@ -56,6 +55,7 @@ final public class Promise<Value:Sendable>: @unchecked Sendable{
     ///            }
     ///        }
     ///     }
+    ///     
     ///     someAsyncMethod(2)
     ///         .then{value in
     ///             print(value)
@@ -68,9 +68,9 @@ final public class Promise<Value:Sendable>: @unchecked Sendable{
     ///     print(value)
     ///
     /// - Parameters:
-    ///    - initFunc: The init func which well be call immediately
-    public init(initFunc:@escaping @Sendable (@escaping @Sendable (Value) -> Void,@escaping @Sendable (Error) -> Void) -> Void){
-        initFunc ({ self.done($0) }, { self.done($0) })
+    ///    - initializer: The init func which well be call immediately
+    public init(initializer:@escaping @Sendable (@escaping @Sendable (Value) -> Void,@escaping @Sendable (Error) -> Void) -> Void){
+        initializer ({ self.done($0) }, { self.done($0) })
     }
     
     /// Issue a completion signal indicating that the Promise has been completed with an error
@@ -81,9 +81,9 @@ final public class Promise<Value:Sendable>: @unchecked Sendable{
     ///    - queue: The callback queue if specified, Otherwise depends on the thread of the `done(_:)` method call
     public func done(_ error:Error,in queue:DispatchQueue? = nil){
         if let queue{
-            queue.async { self.done(.failure(error)) }
+            queue.async { self._done(.failure(error)) }
         }else{
-            self.done(.failure(error))
+            self._done(.failure(error))
         }
     }
     
@@ -94,16 +94,24 @@ final public class Promise<Value:Sendable>: @unchecked Sendable{
     ///    - queue: The callback queue if specified, Otherwise depends on the thread of the `done(_:)` method call
     public func done(_ value:Value,in queue:DispatchQueue? = nil){
         if let queue{
-            queue.async { self.done(.success(value)) }
+            queue.async { self._done(.success(value)) }
         }else{
-            self.done(.success(value))
+            self._done(.success(value))
         }
     }
     
     /// It has no effect when repeated calls.
     /// - Parameters:
     ///    - result: done with the result
-    public func done(_ result:Result<Value,Error>){
+    ///    - queue: The callback queue if specified, Otherwise depends on the thread of the `done(_:)` method call
+    public func done(_ result:Result<Value,Error>,in queue:DispatchQueue? = nil){
+        if let queue{
+            queue.async { self._done(result) }
+        }else{
+            self._done(result)
+        }
+    }
+    private func _done(_ result:Result<Value,Error>){
         lock.lock()
         defer { lock.unlock() }
         if self.result == nil{
@@ -162,13 +170,13 @@ extension Promise{
     ///     }
     ///
     /// - Parameters:
-    ///    - handler: The  handler  after some  result returned. Both success and failure are included.The thread of the handler  depends on the thread of the `done(_:)` method call
+    ///    - onresult: The  handler  after some  result returned. Both success and failure are included.The thread of the handler  depends on the thread of the `done(_:)` method call
     /// - Returns: The next promise in the chain
     @discardableResult
-    public func map<Other:Sendable>(_ handler:@escaping @Sendable (Result<Value,Error>) -> Result<Other,Error> ) -> Promise<Other>{
+    public func map<Other:Sendable>(_ onresult:@escaping @Sendable (Result<Value,Error>) -> Result<Other,Error> ) -> Promise<Other>{
         let next = Promise<Other>()
         self.withFinish {
-            next.done(handler(self.result!))
+            next.done(onresult(self.result!))
             return .init()
         }
         return next
@@ -190,13 +198,13 @@ extension Promise{
     ///     }
     ///
     /// - Parameters:
-    ///    - handler: The  handler  after some  result returned. Both success and failure are included.The thread of the handler  depends on the thread of the `done(_:)` method call
+    ///    - onresult: The  handler  after some  result returned. Both success and failure are included.The thread of the handler  depends on the thread of the `done(_:)` method call
     /// - Returns: The next promise in the chain
     @discardableResult
-    public func map<Other:Sendable>(_ handler:@escaping @Sendable (Result<Value,Error>) -> Promise<Other>) -> Promise<Other>{
+    public func map<Other:Sendable>(_ onresult:@escaping @Sendable (Result<Value,Error>) -> Promise<Other>) -> Promise<Other>{
         let next = Promise<Other>()
         self.withFinish {
-            handler(self.result!).map { r in
+            onresult(self.result!).map { r in
                 next.done(r)
                 return r
             }
@@ -217,15 +225,15 @@ extension Promise{
     ///     }
     ///
     /// - Parameters:
-    ///    - handler: The  value handler  after success value and retrun an other value.The thread of the handler  depends on the thread of the `done(_:)` method call
+    ///    - onresolved: The  value handler  after success value and retrun an other value.The thread of the handler  depends on the thread of the `done(_:)` method call
     /// - Returns: The next promise in the chain
     @discardableResult
-    public func then<Other:Sendable>(_ handler:@escaping @Sendable (Value) throws -> Other ) -> Promise<Other>{
+    public func then<Other:Sendable>(_ onresolved:@escaping @Sendable (Value) throws -> Other ) -> Promise<Other>{
         self.map { r in
             switch r {
             case .success(let v):
                 do {
-                    return .success(try handler(v))
+                    return .success(try onresolved(v))
                 }catch{
                     return .failure(error)
                 }
@@ -247,15 +255,15 @@ extension Promise{
     ///     }
     ///
     /// - Parameters:
-    ///    - handler: The  value handler  after success value and retrun an other promise.The thread of the handler  depends on the thread of the `done(_:)` method call
+    ///    - onresolved: The  value handler  after success value and retrun an other promise.The thread of the handler  depends on the thread of the `done(_:)` method call
     /// - Returns: The next promise in the chain
     @discardableResult
-    public func then<Other:Sendable>(_ handler:@escaping @Sendable (Value)throws -> Promise<Other> ) -> Promise<Other>{
+    public func then<Other:Sendable>(_ onresolved:@escaping @Sendable (Value)throws -> Promise<Other> ) -> Promise<Other>{
         self.map { r in
             switch r {
             case .success(let v):
                 do{
-                    return try handler(v)
+                    return try onresolved(v)
                 }catch{
                     return Promise<Other>(error)
                 }
@@ -281,50 +289,58 @@ extension Promise{
     ///
     ///     let value = try await promise.wait()
     ///     print(value) // 100
+    ///
     ///     ///after some time
-    ///     promise.done(some error)
+    ///     DispatchQueue.global().async{
+    ///         promise.done(some error)
+    ///     }
     ///
     /// - Parameters:
-    ///    - handler: The error handler when some error.The thread of the handler  depends on the thread of the `done(_:)` method call
-    ///
-    /// Then return type of the handler can be
-    /// - `Value`: resolve the error to a new value.
-    /// - `Promise<Value>`: resolve the error to a new async promise
-    /// - `Error`: map the error to an other
-    /// - `throws`: map the error to an other
-    /// - `Void`: keep original error
+    ///    - onrejected: The error handler when some error.The thread of the handler  depends on the thread of the `done(_:)` method call
     ///
     /// - Returns: The next promise in the chain
+    ///
+    /// - Important: `Catch` is designed differently from `Javascript`.
+    /// Here we keep the original value type forever so that we can pass the value further down.
+    /// We are not allowed to catch an exception and return a new  `type` of `value` at the same time.(At most cases we do not need to)
+    /// If you want to return a `value` of a new `type`, use `then(:)` or `map(:)` method before `catch`.
+    ///
+    /// Then return type of the handler as below:
+    /// - `Value`: resolve the error to a new value for same type.
+    /// - `Promise<Value>`:  resolve the error to a new value for same type.
+    /// - `Error`: map the error to an other.
+    /// - `Void`: keep original error.
+    /// - `throws`: map the error to an other.
+
     @discardableResult
-       public func `catch`(_ handler:@escaping @Sendable (Error)throws -> Any? ) -> Promise<Value>{
-           self.map { r in
-               switch r {
-               case .success(let v):
-                   return Promise<Value>(v)
-               case .failure(let err):
-                   do {
-                       if let value = try handler(err){
-                           switch value{
-                           case let v as Value:      // got new value, resolve it
-                               return Promise<Value>(v)
-                           case let pro as Promise<Value>: // got other promise return it
-                               return pro
-                           case let error as Error:  // got new error, trhow it
-                               return Promise<Value>(error)
-                           case _ as Void:           // got void, keep orginal error
-                               return Promise<Value>(err)
-                           default:                  // got other value rethrow UnexpectType error
-                               return Promise<Value>(UnexpectType(type(of: value)))
-                           }
-                       }
-                       return Promise<Value>(err)
-                   }catch{
-                       return Promise<Value>(error)
-                   }
-               }
-           }
-       }
-        
+    public func `catch`(_ onrejected:@escaping @Sendable (Error)throws -> Any? ) -> Promise<Value>{
+        self.map { r in
+            switch r {
+            case .success(let value):
+                return Promise<Value>(value)
+            case .failure(let err):
+                do {
+                    if let v = try onrejected(err){
+                        switch v{
+                        case let value as Value:// got new value, resolve it
+                            return Promise<Value>(value)
+                        case let promise as Promise<Value>: // got other promise return it
+                            return promise
+                        case let newerr as Error:// got new error, trhow it
+                            return Promise<Value>(newerr)
+                        case _ as Void:// got void, keep orginal error
+                            return Promise<Value>(err)
+                        default:// got other value, that's fatal error!!.
+                            fatalError("Return other type:[\(type(of:v))] not be allowed!! Expect [\(Value.self)] or [\(type(of:self))].")
+                        }
+                    }
+                    return Promise<Value>(err)
+                }catch{ // got new error, trhow it
+                    return Promise<Value>(error)
+                }
+            }
+        }
+    }
     /// Wait for the promise to complete and return the  success value or throw an error
     ///
     ///     func someAsyncMethod(value:Int)->Promise<Int>{
@@ -351,25 +367,33 @@ extension Promise{
             }
         }
     }
-    
 }
-extension Promise{
-    
-    /// Occurs when an error is caught in `catch(_:)`
-    ///
-    /// - Important: In theory, such errors should not exist
-    /// - Important: The developers need to ensure that the correct data type is returned in `catch(_:)`
-    public struct UnexpectType:Error,CustomStringConvertible{
-        private let type:Any.Type
-        internal init(_ type:Any.Type){
-            self.type = type
-        }
-        public var description: String{
-            "UnexpectType(\(type),expect:\(Value.self) or \(Promise<Value>.self)"
-        }
+#if os(macOS) || os(iOS) || os(watchOS) || os(tvOS)
+/// Lock for `os_unfair_lock` wrapper in `Darwin`
+final class Lock{
+    private let unfair: os_unfair_lock_t
+    deinit {
+        unfair.deinitialize(count: 1)
+        unfair.deallocate()
+    }
+    init() {
+        unfair = .allocate(capacity: 1)
+        unfair.initialize(to: os_unfair_lock())
+    }
+    /// lock
+    func lock(){
+        os_unfair_lock_lock(unfair)
+    }
+    /// unlock
+    /// - Important: If `unlock` before `lock`
+    func unlock(){
+        os_unfair_lock_unlock(unfair)
     }
 }
-
+#else
+/// Lock for `NSLock`
+public typealias Lock = NSLock
+#endif
 
 
 
