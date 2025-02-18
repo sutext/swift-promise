@@ -13,15 +13,12 @@ import Foundation
 /// - It is mainly used when an asynchronous return value is required
 /// - Internally, we make it thread-safe, so we mark it  `@unchecked Sendable`
 /// - The thread of the callback function depends on the thread of the `done(_:)` method call
-final public class Promise<Value:Sendable>: @unchecked Sendable{
-    private let lock = Lock()
-    private var result:Result<Value,Error>?
+public final class Promise<Value:Sendable>: @unchecked Sendable{
+    @Safely private var result:Result<Value,Error>?
     private var callbacks:Callbacks = Callbacks()
     /// The promise has been done or not
     public var isDone:Bool {
-        lock.lock()
-        defer { lock.unlock() }
-        return self.result != nil
+        $result.read { $0 != nil }
     }
     
     /// Create a promise with no resolver or reject
@@ -112,24 +109,24 @@ final public class Promise<Value:Sendable>: @unchecked Sendable{
         }
     }
     private func _done(_ result:Result<Value,Error>){
-        lock.lock()
-        defer { lock.unlock() }
-        if self.result == nil{
-            self.result = result
-            self.callbacks.run()
-            self.callbacks = Callbacks()
+        $result.write {
+            if $0 == nil{
+                $0 = result
+                self.callbacks.run()
+                self.callbacks = Callbacks()
+            }
         }
     }
     /// Add finish callback
     /// - Parameters:
     ///    - callback: done with the result
     private func withFinish(callback:@escaping Callbacks.Element){
-        lock.lock()
-        defer { lock.unlock() }
-        if self.result == nil{
-            self.callbacks.append(callback)
-        }else{
-            callback().run()
+        $result.read {
+            if $0 == nil{
+                self.callbacks.append(callback)
+            }else{
+                callback().run()
+            }
         }
     }
 }
@@ -368,32 +365,6 @@ extension Promise{
         }
     }
 }
-#if os(macOS) || os(iOS) || os(watchOS) || os(tvOS)
-/// Lock for `os_unfair_lock` wrapper in `Darwin`
-final class Lock{
-    private let unfair: os_unfair_lock_t
-    deinit {
-        unfair.deinitialize(count: 1)
-        unfair.deallocate()
-    }
-    init() {
-        unfair = .allocate(capacity: 1)
-        unfair.initialize(to: os_unfair_lock())
-    }
-    /// lock
-    func lock(){
-        os_unfair_lock_lock(unfair)
-    }
-    /// unlock
-    /// - Important: If `unlock` before `lock`
-    func unlock(){
-        os_unfair_lock_unlock(unfair)
-    }
-}
-#else
-/// Lock for `NSLock`
-public typealias Lock = NSLock
-#endif
 
 
 

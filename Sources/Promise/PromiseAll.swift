@@ -12,7 +12,7 @@ import Foundation
 ///   - p1:The first promise
 ///   - p2:The second promise
 ///   - p3:The third promise and so on ...
-///   - queue: The callback queue if specified. Ohterwise ,it depends on where `done(_:)` is called
+///   - queue: The callback queue if specified. Otherwise it will be executed on the global queue
 public func PromiseAll<V1,V2>(
     _ p1:Promise<V1>,
     _ p2:Promise<V2>,
@@ -34,7 +34,7 @@ public func PromiseAll<V1,V2>(
 /// - Parameters:
 ///   - p1:The first promise
 ///   - p2:The second promise and so on ...
-///   - queue: The callback queue if specified. Ohterwise ,it depends on where `done(_:)` is called
+///   - queue: The callback queue if specified. Otherwise it will be executed on the global queue
 public func PromiseAll<V1,V2,V3>(
     _ p1:Promise<V1>,
     _ p2:Promise<V2>,
@@ -59,7 +59,7 @@ public func PromiseAll<V1,V2,V3>(
 ///   - p1:The first promise
 ///   - p2:The second promise
 ///   - p3:The third promise and so on ...
-///   - queue: The callback queue if specified. Ohterwise ,it depends on where `done(_:)` is called
+///   - queue: The callback queue if specified. Otherwise it will be executed on the global queue
 public func PromiseAll<V1,V2,V3,V4>(
     _ p1:Promise<V1>,
     _ p2:Promise<V2>,
@@ -86,7 +86,7 @@ public func PromiseAll<V1,V2,V3,V4>(
 ///   - p1:The first promise
 ///   - p2:The second promise
 ///   - p3:The third promise and so on ...
-///   - queue: The callback queue if specified. Ohterwise ,it depends on where `done(_:)` is called
+///   - queue: The callback queue if specified. Otherwise it will be executed on the global queue
 public func PromiseAll<V1,V2,V3,V4,V5>(
     _ p1:Promise<V1>,
     _ p2:Promise<V2>,
@@ -115,7 +115,7 @@ public func PromiseAll<V1,V2,V3,V4,V5>(
 ///   - p1:The first promise
 ///   - p2:The second promise
 ///   - p3:The third promise and so on ...
-///   - queue: The callback queue if specified. Ohterwise ,it depends on where `done(_:)` is called
+///   - queue: The callback queue if specified. Otherwise it will be executed on the global queue
 public func PromiseAll<V1,V2,V3,V4,V5,V6>(
     _ p1:Promise<V1>,
     _ p2:Promise<V2>,
@@ -146,7 +146,7 @@ public func PromiseAll<V1,V2,V3,V4,V5,V6>(
 ///   - p1:The first promise
 ///   - p2:The second promise
 ///   - p3:The third promise and so on ...
-///   - queue: The callback queue if specified. Ohterwise ,it depends on where `done(_:)` is called
+///   - queue: The callback queue if specified. Otherwise it will be executed on the global queue
 public func PromiseAll<V1,V2,V3,V4,V5,V6,V7>(
     _ p1:Promise<V1>,
     _ p2:Promise<V2>,
@@ -179,7 +179,7 @@ public func PromiseAll<V1,V2,V3,V4,V5,V6,V7>(
 ///   - p1:The first promise
 ///   - p2:The second promise
 ///   - p3:The third promise and so on ...
-///   - queue: The callback queue if specified. Ohterwise ,it depends on where `done(_:)` is called
+///   - queue: The callback queue if specified. Otherwise it will be executed on the global queue
 public func PromiseAll<V1,V2,V3,V4,V5,V6,V7,V8>(
     _ p1:Promise<V1>,
     _ p2:Promise<V2>,
