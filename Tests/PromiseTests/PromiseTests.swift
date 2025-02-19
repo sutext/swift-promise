@@ -1,7 +1,7 @@
 import Testing
 import Dispatch
 import Foundation
-import Promise
+@testable import Promise
 
 enum E:Error{
     case message(String)
@@ -95,12 +95,6 @@ enum E:Error{
     assert(v2 == 103)
 }
 
-@Test func requestAll()async throws{
-    let values = try await PromiseAll(request0(), request0(), request0(), request0(), request0(),in: .main).wait()
-    print(values)
-    assert(values == (100,100,100,100,100))
-}
-
 @Sendable func request0()->Promise<Int>{
     Promise{ resolve,reject in
         DispatchQueue(label: "async task").asyncAfter(deadline: .now()+0.5){
@@ -140,4 +134,27 @@ enum E:Error{
             }
         }
     }
+}
+@Test func requestAll()async throws{
+    let values = try await PromiseAll(request0(), request0(), request0(), request0(), request0(),in: .main).wait()
+    print(values)
+    assert(values == (100,100,100,100,100))
+}
+
+struct TestSafely{
+    var v1:String
+    var v2:String
+}
+struct TestSafely2{
+    var v1:String
+    var v2:String
+    var v3:TestSafely
+}
+
+@Test func testSafely(){
+    let t1 = TestSafely(v1: "1", v2: "2")
+    let safe1 = Safely<Dictionary<String,String>>(wrappedValue: [:])
+    let safe2 = Safely<TestSafely2>(wrappedValue: .init(v1: "1", v2: "2",v3: t1))
+    print(safe1["test"] == nil)
+    assert(safe2.v3.v1 == "1")
 }
