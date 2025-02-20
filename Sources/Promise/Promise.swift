@@ -38,7 +38,12 @@ public final class Promise<Value:Sendable>: @unchecked Sendable{
     public init(_ error:Error){
         self.done(error)
     }
-    
+    /// Create a promise and call `done(result)` immediately
+    /// - Parameters:
+    ///   - result: The result to be return
+    public init(_ result:Result<Value,Error>){
+        self.done(result)
+    }
     /// This is the recommended constructor
     ///
     ///     func someAsyncMethod(value:Int)->Promise<Int>{
@@ -308,7 +313,6 @@ extension Promise{
     /// - `Error`: map the error to an other.
     /// - `Void`: keep original error.
     /// - `throws`: map the error to an other.
-
     @discardableResult
     public func `catch`(_ onrejected:@escaping @Sendable (Error)throws -> Any? ) -> Promise<Value>{
         self.map { r in
@@ -357,6 +361,8 @@ extension Promise{
     ///
     /// - Returns: A success value
     /// - Throws: A failure error from anywhre
+    ///
+    @discardableResult
     public func wait() async throws -> Value{
         return try await withUnsafeThrowingContinuation { cont in
             self.finally { r in

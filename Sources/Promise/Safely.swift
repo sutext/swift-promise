@@ -53,12 +53,14 @@ public final class Safely<Value> : @unchecked Sendable{
         set { around { value = newValue } }
     }
     /// around some safer codes and retrun a new value of type T
+    @discardableResult
     public func around<T>(_ closure: () throws -> T) rethrows -> T {
         lock()
         defer { unlock() }
         return try closure()
     }
     /// Access wrapped  value and retrun a new value of type T
+    @discardableResult
     public func read<T>(_ closure: (Value) throws -> T) rethrows -> T {
         try around { try closure(self.value) }
     }
@@ -74,6 +76,7 @@ public final class Safely<Value> : @unchecked Sendable{
     ///                 }
     ///             }
     ///
+    @discardableResult
     public func write<T>(_ closure: (inout Value) throws -> T) rethrows -> T {
         try around { try closure(&self.value) }
     }
