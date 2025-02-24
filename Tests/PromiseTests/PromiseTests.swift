@@ -9,27 +9,7 @@ enum E:Error{
 
 @Test func test1() async throws {
     let t1:TimeInterval = Date.now.timeIntervalSince1970
-    
-    let promise = Promise { resolve, reject in
-        DispatchQueue(label: "q1").asyncAfter(deadline: .now()+5){
-            resolve(205)
-        }
-        DispatchQueue.global().asyncAfter(deadline: .now()+5){
-            reject(E.message("global rejected"))
-        }
-        DispatchQueue.main.asyncAfter(deadline: .now()+5){
-            resolve(203)
-        }
-        DispatchQueue(label: "q2").asyncAfter(deadline: .now()+5){
-            resolve(207)
-        }
-    }
-    
-    promise.then { i in
-        print("first print:",i)
-    }
-    let promise2 = Promise<Int>(3)
-    let v = try await promise2
+    let v = try await Promise<Int>(4)
         .then { i in
             if i%2 == 0{
                 return "\(i*i)"
@@ -51,12 +31,12 @@ enum E:Error{
         }
         .then{ i in
             ///
-            return i + 1
+            return 100
         }
         .catch{ err in // print err and keep error
             return Promise{resolve,reject in
                 DispatchQueue(label: "q4").asyncAfter(deadline: .now()+5){
-                    resolve("100")
+                    resolve(100)
                 }
                 DispatchQueue(label: "q5").asyncAfter(deadline: .now()+5){
                     reject(err)
@@ -69,13 +49,39 @@ enum E:Error{
         }
         .catch{ err in
             print("Last: \(err)")
-            print(Thread.current)
             return 100
         }
         .wait()
     let t2:TimeInterval = Date.now.timeIntervalSince1970
     print("value:",v,"cost:",(t2-t1))
     assert(v == 100)
+}
+
+@MainActor func updateUI(_ i:Int){
+    print("update some ui in main")
+}
+@Test func uiTest() async throws {
+    let promise = Promise { resolve, reject in
+        DispatchQueue(label: "q1").asyncAfter(deadline: .now()+5){
+            resolve(205)
+        }
+        DispatchQueue.global().asyncAfter(deadline: .now()+5){
+            reject(E.message("global rejected"))
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now()+5){
+            resolve(203)
+        }
+        DispatchQueue(label: "q2").asyncAfter(deadline: .now()+5){
+            resolve(207)
+        }
+    }
+    
+    promise.then { i in
+        return i * i
+    }.then { i in
+        await updateUI(i)
+    }
+    try await Task.sleep(nanoseconds: 6_000_000_000)
 }
 @Test func test2()async throws{
     let promise = Promise { resolve, reject in
@@ -136,7 +142,7 @@ enum E:Error{
     }
 }
 @Test func requestAll()async throws{
-    let values = try await PromiseAll(request0(), request0(), request0(), request0(), request0(),in: .main).wait()
+    let values = try await PromiseAll(request0(), request0(), request0(), request0(), request0()).wait()
     print(values)
     assert(values == (100,100,100,100,100))
 }

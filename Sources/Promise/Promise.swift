@@ -5,17 +5,17 @@
 //  Created by supertext on 2024/12/19.
 //
 
-import Foundation
-
 ///  A pattern of asynchronous programming
 ///
 /// - Look at `Javascript` `Promise`  for design ideas
 /// - It is mainly used when an asynchronous return value is required
 /// - Internally, we make it thread-safe, so we mark it  `@unchecked Sendable`
-/// - The thread of the callback function depends on the thread of the `done(_:)` method call
+/// - Callbacks are uniformly scheduled by the system `Task` scheduler. If you want to update the UI use `MainActor`
+///
 public final class Promise<Value:Sendable>: @unchecked Sendable{
+    typealias Callback =  @Sendable () async -> Void
     @Safely private var result:Result<Value,Error>?
-    private var callbacks:Callbacks = Callbacks()
+    private var callbacks:[Callback] = []
     /// The promise has been done or not
     public var isDone:Bool {
         $result.read { $0 != nil }
@@ -29,20 +29,20 @@ public final class Promise<Value:Sendable>: @unchecked Sendable{
     /// - Parameters:
     ///   - value: The success value to be return
     public init(_ value:Value){
-        self.done(value)
+        result = .success(value)
     }
     
     /// Create a promise and call `done(error)` immediately
     /// - Parameters:
     ///   - error: The failure error to be return
     public init(_ error:Error){
-        self.done(error)
+        result = .failure(error)
     }
     /// Create a promise and call `done(result)` immediately
     /// - Parameters:
     ///   - result: The result to be return
     public init(_ result:Result<Value,Error>){
-        self.done(result)
+        self.result = result
     }
     /// This is the recommended constructor
     ///
@@ -80,57 +80,45 @@ public final class Promise<Value:Sendable>: @unchecked Sendable{
     ///
     /// - Parameters:
     ///    - error: done with the failure error result
-    ///    - queue: The callback queue if specified, Otherwise depends on the thread of the `done(_:)` method call
-    public func done(_ error:Error,in queue:DispatchQueue? = nil){
-        if let queue{
-            queue.async { self._done(.failure(error)) }
-        }else{
-            self._done(.failure(error))
-        }
+    public func done(_ error:Error){
+        self.done(.failure(error))
     }
     
     /// Issue a completion signal indicating that the Promise has been completed with an value
     /// It has no effect when repeated
     /// - Parameters:
     ///    - value: done with the success value result
-    ///    - queue: The callback queue if specified, Otherwise depends on the thread of the `done(_:)` method call
-    public func done(_ value:Value,in queue:DispatchQueue? = nil){
-        if let queue{
-            queue.async { self._done(.success(value)) }
-        }else{
-            self._done(.success(value))
-        }
+    public func done(_ value:Value){
+        self.done(.success(value))
     }
     
     /// It has no effect when repeated calls.
     /// - Parameters:
     ///    - result: done with the result
-    ///    - queue: The callback queue if specified, Otherwise depends on the thread of the `done(_:)` method call
-    public func done(_ result:Result<Value,Error>,in queue:DispatchQueue? = nil){
-        if let queue{
-            queue.async { self._done(result) }
-        }else{
-            self._done(result)
-        }
-    }
-    private func _done(_ result:Result<Value,Error>){
-        $result.write {
+    public func done(_ result:Result<Value,Error>){
+        self.$result.write {
             if $0 == nil{
                 $0 = result
-                self.callbacks.run()
-                self.callbacks = Callbacks()
+                for f in self.callbacks{
+                    Task{
+                        await f()
+                    }
+                }
+                self.callbacks = []
             }
         }
     }
     /// Add finish callback
     /// - Parameters:
     ///    - callback: done with the result
-    private func withFinish(callback:@escaping Callbacks.Element){
-        $result.read {
+    private func withFinish(callback:@escaping Callback){
+        self.$result.read {
             if $0 == nil{
                 self.callbacks.append(callback)
             }else{
-                callback().run()
+                Task {
+                    await callback()
+                }
             }
         }
     }
@@ -149,11 +137,11 @@ extension Promise{
     ///     }
     ///
     /// - Parameters:
-    ///   - handler: The  finally handler  after some  result returned. Both success and failure are included.The thread of the handler  depends on the thread of the `done(_:)` method call
-    public func finally(_ handler:@escaping @Sendable (Result<Value,Error>)->Void ){
+    ///   - handler: The  finally handler  after some  result returned. Both success and failure are included.
+    ///   It will been scheduled by the system `Task` scheduler. If you want to update the UI use `MainActor`
+    public func finally(_ handler:@escaping @Sendable (Result<Value,Error>)async ->Void ){
         self.withFinish {
-            handler(self.result!)
-            return .init()
+            await handler(self.result!)
         }
     }
     /// Process success value or failure error after promise comleted
@@ -172,14 +160,20 @@ extension Promise{
     ///     }
     ///
     /// - Parameters:
-    ///    - onresult: The  handler  after some  result returned. Both success and failure are included.The thread of the handler  depends on the thread of the `done(_:)` method call
+    ///    - onresult: The  handler  after some  result returned. Both success and failure are included
+    ///   It will been scheduled by the system `Task` scheduler. If you want to update the UI use `MainActor`
+    ///
     /// - Returns: The next promise in the chain
     @discardableResult
-    public func map<Other:Sendable>(_ onresult:@escaping @Sendable (Result<Value,Error>) -> Result<Other,Error> ) -> Promise<Other>{
+    public func map<Other:Sendable>(_ onresult:@escaping @Sendable (Result<Value,Error>)async throws -> Result<Other,Error> ) -> Promise<Other>{
         let next = Promise<Other>()
         self.withFinish {
-            next.done(onresult(self.result!))
-            return .init()
+            do{
+                let result = try await onresult(self.result!)
+                next.done(result)
+            }catch{
+                next.done(error)
+            }
         }
         return next
     }
@@ -200,17 +194,22 @@ extension Promise{
     ///     }
     ///
     /// - Parameters:
-    ///    - onresult: The  handler  after some  result returned. Both success and failure are included.The thread of the handler  depends on the thread of the `done(_:)` method call
+    ///    - onresult: The  handler  after some  result returned. Both success and failure are included
+    ///   It will been scheduled by the system `Task` scheduler. If you want to update the UI use `MainActor`
+    ///
     /// - Returns: The next promise in the chain
     @discardableResult
-    public func map<Other:Sendable>(_ onresult:@escaping @Sendable (Result<Value,Error>) -> Promise<Other>) -> Promise<Other>{
+    public func map<Other:Sendable>(_ onresult:@escaping @Sendable (Result<Value,Error>)async throws -> Promise<Other>) -> Promise<Other>{
         let next = Promise<Other>()
         self.withFinish {
-            onresult(self.result!).map { r in
-                next.done(r)
-                return r
+            do{
+                try await onresult(self.result!).map{
+                    next.done($0)
+                    return $0
+                }
+            }catch{
+                next.done(error)
             }
-            return .init()
         }
         return next
     }
@@ -227,18 +226,16 @@ extension Promise{
     ///     }
     ///
     /// - Parameters:
-    ///    - onresolved: The  value handler  after success value and retrun an other value.The thread of the handler  depends on the thread of the `done(_:)` method call
+    ///    - onresolved: The  value handler  after success value and retrun an other value.
+    ///   It will been scheduled by the system `Task` scheduler. If you want to update the UI use `MainActor`
+    ///
     /// - Returns: The next promise in the chain
     @discardableResult
-    public func then<Other:Sendable>(_ onresolved:@escaping @Sendable (Value) throws -> Other ) -> Promise<Other>{
+    public func then<Other:Sendable>(_ onresolved:@escaping @Sendable (Value)async throws -> Other ) -> Promise<Other>{
         self.map { r in
             switch r {
             case .success(let v):
-                do {
-                    return .success(try onresolved(v))
-                }catch{
-                    return .failure(error)
-                }
+                return .success(try await onresolved(v))
             case .failure(let err):
                 return .failure(err)
             }
@@ -257,20 +254,18 @@ extension Promise{
     ///     }
     ///
     /// - Parameters:
-    ///    - onresolved: The  value handler  after success value and retrun an other promise.The thread of the handler  depends on the thread of the `done(_:)` method call
+    ///    - onresolved: The  value handler  after success value and retrun an other promise.
+    ///   It will been scheduled by the system `Task` scheduler. If you want to update the UI use `MainActor`
+    ///
     /// - Returns: The next promise in the chain
     @discardableResult
-    public func then<Other:Sendable>(_ onresolved:@escaping @Sendable (Value)throws -> Promise<Other> ) -> Promise<Other>{
+    public func then<Other:Sendable>(_ onresolved:@escaping @Sendable (Value)async throws -> Promise<Other> ) -> Promise<Other>{
         self.map { r in
             switch r {
             case .success(let v):
-                do{
-                    return try onresolved(v)
-                }catch{
-                    return Promise<Other>(error)
-                }
+                return try await onresolved(v)
             case .failure(let err):
-                return Promise<Other>(err)
+                throw err
             }
         }
     }
@@ -298,7 +293,8 @@ extension Promise{
     ///     }
     ///
     /// - Parameters:
-    ///    - onrejected: The error handler when some error.The thread of the handler  depends on the thread of the `done(_:)` method call
+    ///    - onrejected: The error handler when some error.
+    ///   It will been scheduled by the system `Task` scheduler. If you want to update the UI use `MainActor`
     ///
     /// - Returns: The next promise in the chain
     ///
@@ -307,37 +303,38 @@ extension Promise{
     /// We are not allowed to catch an exception and return a new  `type` of `value` at the same time.(At most cases we do not need to)
     /// If you want to return a `value` of a new `type`, use `then(:)` or `map(:)` method before `catch`.
     ///
-    /// Then return type of the handler as below:
+    /// The return type of the handler as below:
     /// - `Value`: resolve the error to a new value for same type.
     /// - `Promise<Value>`:  resolve the error to a new value for same type.
     /// - `Error`: map the error to an other.
     /// - `Void`: keep original error.
+    /// - `nil`: keep original error.
     /// - `throws`: map the error to an other.
     @discardableResult
-    public func `catch`(_ onrejected:@escaping @Sendable (Error)throws -> Any? ) -> Promise<Value>{
+    public func `catch`(_ onrejected:@escaping @Sendable (Error)async throws -> Any? ) -> Promise<Value>{
         self.map { r in
             switch r {
             case .success(let value):
-                return Promise<Value>(value)
+                return Promise(value)
             case .failure(let err):
                 do {
-                    if let v = try onrejected(err){
-                        switch v{
-                        case let value as Value:// got new value, resolve it
-                            return Promise<Value>(value)
-                        case let promise as Promise<Value>: // got other promise return it
-                            return promise
-                        case let newerr as Error:// got new error, trhow it
-                            return Promise<Value>(newerr)
-                        case _ as Void:// got void, keep orginal error
-                            return Promise<Value>(err)
-                        default:// got other value, that's fatal error!!.
-                            fatalError("Return other type:[\(type(of:v))] not be allowed!! Expect [\(Value.self)] or [\(type(of:self))].")
-                        }
+                    guard let v = try await onrejected(err) else{ // got nil, keep orginal error
+                        throw err
                     }
-                    return Promise<Value>(err)
+                    switch v{
+                    case let value as Value:// got new value, resolve it
+                        return Promise(value)
+                    case let promise as Promise<Value>: // got other promise return it
+                        return promise
+                    case let newerr as Error:// got new error, trhow it
+                        throw newerr
+                    case _ as Void:// got void, keep orginal error
+                        throw err
+                    default:// got other value, that's fatal error!!.
+                        fatalError("Return other type:[\(type(of:v))] not be allowed!! Expect [\(Value.self)] or [\(type(of:self))].")
+                    }
                 }catch{ // got new error, trhow it
-                    return Promise<Value>(error)
+                    throw error
                 }
             }
         }
@@ -371,6 +368,3 @@ extension Promise{
         }
     }
 }
-
-
-
