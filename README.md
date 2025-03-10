@@ -1,10 +1,31 @@
 # swift-promise
-
-### Introduce
-
+![Platform](https://img.shields.io/badge/platforms-iOS%2013.0%20%7C%20macOS%2010.15%20%7C%20tvOS%2013.0%20%7C%20watchOS%206.0-F28D00.svg)
 - A pattern of asynchronous programming
 - Look at `Javascript` `Promise`  for design ideas
 - It is mainly used when an asynchronous return value is required
+
+## Requirements
+
+- iOS 13.0+ | macOS 10.15+ | tvOS 13.0+ | watchOS 6.0+
+- Xcode 8
+
+## Integration
+
+#### Swift Package Manager
+
+You can use [The Swift Package Manager](https://swift.org/package-manager) to install `swift-promise` by adding the proper description to your `Package.swift` file:
+
+```swift
+// swift-tools-version:5.8
+import PackageDescription
+
+let package = Package(
+    name: "YOUR_PROJECT_NAME",
+    dependencies: [
+        .package(url: "https://github.com/sutext/swift-promise.git", from: "2.0.1"),
+    ]
+)
+```
 
 ### Usage
 
