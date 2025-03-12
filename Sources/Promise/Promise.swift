@@ -182,10 +182,12 @@ extension Promise{
     ///
     ///     let promise = Promise<Int>()
     ///     promise.map{v in
-    ///         if _ {
-    ///             return .success("\(v*v*v)")
-    ///         }else{
-    ///             return .failure(some error)
+    ///         Promise{ resolve,reject
+    ///             if _ {
+    ///                 resolve("\(v*v*v)")
+    ///             }else{
+    ///                 reject(some error)
+    ///             }
     ///         }
     ///     }.then{ v in
     ///         print(v)
@@ -276,12 +278,14 @@ extension Promise{
     ///     let promise = Promise<Int>().then{ v in
     ///         print(v)
     ///         return v*v
-    ///     }.catch{ err in // print err and keep error
+    ///     }.catch{ err in // print err return void and keep error
     ///         print(err)
     ///     }.catch{ err in // throw other eror
     ///         throw E.message("some other error")
     ///     }.catch{ err in // resolve error as new success value
     ///         return 100
+    ///     }.catch{ err in // resolve error as new async success value
+    ///         return Promise(2)
     ///     }
     ///
     ///     let value = try await promise.wait()
