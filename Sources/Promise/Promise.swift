@@ -205,9 +205,8 @@ extension Promise{
         let next = Promise<Other>()
         self.withFinish {
             do{
-                try await onresult(self.result!).map{
+                try await onresult(self.result!).finally{
                     next.done($0)
-                    return $0
                 }
             }catch{
                 next.done(error)
