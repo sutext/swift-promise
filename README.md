@@ -31,9 +31,9 @@ let package = Package(
 
 ```swift
 
-    let promise = Promise { resolve, reject in
+    let promise = Promise { done in
         DispatchQueue.global().asyncAfter(deadline: .now()+5){
-            resolve(200)
+            done(.success(200))
         }
     }
     let v = try await promise
