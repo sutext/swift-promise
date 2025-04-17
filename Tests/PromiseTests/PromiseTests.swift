@@ -9,7 +9,7 @@ enum E:Error{
 
 @Test func test1() async throws {
     let t1:TimeInterval = Date.now.timeIntervalSince1970
-    let v = try await Promise<Int>(4)
+    let p = Promise<Int>(4)
         .then { i in
             if i%2 == 0{
                 return "\(i*i)"
@@ -17,9 +17,9 @@ enum E:Error{
             throw E.message("Some truble")
         }
         .then{ s in
-            return Promise{resolve,reject in
+            return Promise{done in
                 DispatchQueue(label: "q3").asyncAfter(deadline: .now()+5){
-                    resolve("\(s)\(s)")
+                    done(.success("\(s)\(s)"))
                 }
             }
         }
@@ -34,12 +34,12 @@ enum E:Error{
             return 100
         }
         .catch{ err in // print err and keep error
-            return Promise{resolve,reject in
+            return Promise{done in
                 DispatchQueue(label: "q4").asyncAfter(deadline: .now()+5){
-                    resolve(100)
+                    done(.success(100))
                 }
                 DispatchQueue(label: "q5").asyncAfter(deadline: .now()+5){
-                    reject(err)
+                    done(.failure(err))
                 }
             }
         }
@@ -51,9 +51,10 @@ enum E:Error{
             print("Last: \(err)")
             return 100
         }
-        .wait()
+    let v = try await p.wait()
     let t2:TimeInterval = Date.now.timeIntervalSince1970
     print("value:",v,"cost:",(t2-t1))
+    assert(p.isDone)
     assert(v == 100)
 }
 
@@ -61,18 +62,18 @@ enum E:Error{
     print("update some ui in main")
 }
 @Test func uiTest() async throws {
-    let promise = Promise { resolve, reject in
+    let promise = Promise { done in
         DispatchQueue(label: "q1").asyncAfter(deadline: .now()+5){
-            resolve(205)
+            done(.success(205))
         }
         DispatchQueue.global().asyncAfter(deadline: .now()+5){
-            reject(E.message("global rejected"))
+            done(.failure(E.message("parameter error")))
         }
         DispatchQueue.main.asyncAfter(deadline: .now()+5){
-            resolve(203)
+            done(.success(203))
         }
         DispatchQueue(label: "q2").asyncAfter(deadline: .now()+5){
-            resolve(207)
+            done(.success(207))
         }
     }
     
@@ -84,9 +85,9 @@ enum E:Error{
     try await Task.sleep(nanoseconds: 6_000_000_000)
 }
 @Test func test2()async throws{
-    let promise = Promise { resolve, reject in
+    let promise = Promise { done in
         DispatchQueue(label: "q1").asyncAfter(deadline: .now()+5){
-            resolve(205)
+            done(.success(205))
         }
     }
     let v = try await promise.wait()
@@ -102,51 +103,105 @@ enum E:Error{
 }
 
 @Sendable func request0()->Promise<Int>{
-    Promise{ resolve,reject in
+    Promise{ done in
         DispatchQueue(label: "async task").asyncAfter(deadline: .now()+0.5){
-            resolve(100)
+            done(.success(100))
         }
     }
 }
 @Sendable func request1(_ p:Int)->Promise<Int>{
-    return Promise{ resolve,reject in
+    return Promise{ done in
         DispatchQueue(label: "async task").asyncAfter(deadline: .now()+1){
             if p == 100{
-                resolve(101)
+                done(.success(101))
             }else{
-                reject(E.message("parameter error"))
+                done(.failure(E.message("parameter error")))
             }
         }
     }
 }
 @Sendable func request2(_ p:Int)->Promise<Int>{
-    return Promise{ resolve,reject in
+    return Promise{ done in
         DispatchQueue(label: "async task").asyncAfter(deadline: .now()+2){
             if p == 101{
-                resolve(102)
+                done(.success(102))
             }else{
-                reject(E.message("parameter error"))
+                done(.failure(E.message("parameter error")))
             }
         }
     }
 }
 @Sendable func request3(_ p:Int)->Promise<Int>{
-    return Promise{ resolve,reject in
+    return Promise{ done in
         DispatchQueue(label: "async task").asyncAfter(deadline: .now()+3){
             if p == 102{
-                resolve(103)
+                done(.success(103))
             }else{
-                reject(E.message("parameter error"))
+                done(.failure(E.message("parameter error")))
             }
         }
     }
 }
-@Test func requestAll()async throws{
-    let values = try await PromiseAll(request0(), request0(), request0(), request0(), request0()).wait()
-    print(values)
-    assert(values == (100,100,100,100,100))
+func asyncFunc(fun: ()->Void){
+    fun()
 }
-
+@Test func requestAll()async throws{
+    let p1 = Promise{done in
+        let v1 = try await request0().wait()
+        let v2 = try await request0().wait()
+        let v3 = try await request0().wait()
+        let v4 = try await request0().wait()
+        let v5 = try await request0().wait()
+        asyncFunc {
+            done(.success((v1,v2,v3,v4,v5)))
+        }
+    }
+    print(try await p1.wait())//cost 5s
+    let p2 = Promise{
+        let v1 = try await request0().wait()
+        let v2 = try await request0().wait()
+        let v3 = try await request0().wait()
+        let v4 = try await request0().wait()
+        let v5 = try await request0().wait()
+        return (v1,v2,v3,v4,v5)
+    }
+    print(try await p2.wait()) // cost 5ss
+    let values = try await Promise(request0(), request0(), request0(), request0(), request0()).wait()
+    print(values)
+    assert(values == (100,100,100,100,100))//cost 0.5s
+}
+@Test func requestAll1()async throws{
+    let p1 = request0()
+    let p2 = request0()
+    let p3 = request0()
+    let p4 = request0()
+    let p5 = request0()
+    let v1 = try await Promise{done in
+        let v1 =  try await p1.wait()
+        let v2 =  try await p2.wait()
+        let v3 =  try await p3.wait()
+        let v4 =  try await p4.wait()
+        let v5 =  try await p5.wait()
+        asyncFunc {
+            done(.success((v1,v2,v3,v4,v5)))
+        }
+    }.wait()
+    
+    print(v1)
+    let v2 = try await Promise{
+        let v1 =  try await p1.wait()
+        let v2 =  try await p2.wait()
+        let v3 =  try await p3.wait()
+        let v4 =  try await p4.wait()
+        let v5 =  try await p5.wait()
+        return (v1,v2,v3,v4,v5)
+    }.wait()
+    
+    print(v2)
+    let values = try await Promise(p1,p2,p3,p4,p5).wait()
+    print(values)
+    assert(values == (100,100,100,100,100))//cost 0.5s
+}
 struct TestSafely{
     var v1:String
     var v2:String

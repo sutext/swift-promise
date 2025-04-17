@@ -14,76 +14,31 @@
 ///
 public final class Promise<Value:Sendable>: @unchecked Sendable{
     typealias Callback =  @Sendable () async -> Void
-    @Safely private var result:Result<Value,Error>?
+    @Safely
+    private var result:Result<Value,Error>?
     private var callbacks:[Callback] = []
-    /// The promise has been done or not
-    public var isDone:Bool {
-        $result.read { $0 != nil }
-    }
-    
-    /// Create a promise with no resolver or reject
-    /// - Important: The `done(_ :)` method must to be called manually
+    /// Create a promise that to be done
     public init(){ }
     
-    /// Create a promise and call `done(value)` immediately
+    /// Create a promise that has been done with value
     /// - Parameters:
     ///   - value: The success value to be return
     public init(_ value:Value){
         result = .success(value)
     }
     
-    /// Create a promise and call `done(error)` immediately
+    /// Create a promise that has been done with error
     /// - Parameters:
     ///   - error: The failure error to be return
     public init(_ error:Error){
         result = .failure(error)
     }
-    /// Create a promise and call `done(result)` immediately
+    /// Create a promise that has been done with result
     /// - Parameters:
     ///   - result: The result to be return
     public init(_ result:Result<Value,Error>){
         self.result = result
     }
-    /// This is the recommended constructor
-    ///
-    ///     func someAsyncMethod(value:Int)->Promise<Int>{
-    ///        return Promise { resolve, reject in
-    ///            DispatchQueue.global().asyncAfter(deadline: .now()+5){
-    ///                if value%2 == 0 {
-    ///                    resolve(value/2)
-    ///                }else{
-    ///                    reject(NSError(domain: "bad error", code: 0))
-    ///                }
-    ///            }
-    ///        }
-    ///     }
-    ///     
-    ///     someAsyncMethod(2)
-    ///         .then{value in
-    ///             print(value)
-    ///         }
-    ///         .catch{error
-    ///             print(error)
-    ///         }
-    ///     /// use async method
-    ///     let value = try await someAsyncMethod(5).wait()
-    ///     print(value)
-    ///
-    /// - Parameters:
-    ///    - initializer: The init func which well be call immediately
-    public init(initializer:@escaping @Sendable (@escaping @Sendable (Value) -> Void,@escaping @Sendable (Error) -> Void) -> Void){
-        initializer ({ self.done($0) }, { self.done($0) })
-    }
-    
-    /// Issue a completion signal indicating that the Promise has been completed with an error
-    /// It has no effect when repeated
-    ///
-    /// - Parameters:
-    ///    - error: done with the failure error result
-    public func done(_ error:Error){
-        self.done(.failure(error))
-    }
-    
     /// Issue a completion signal indicating that the Promise has been completed with an value
     /// It has no effect when repeated
     /// - Parameters:
@@ -91,7 +46,14 @@ public final class Promise<Value:Sendable>: @unchecked Sendable{
     public func done(_ value:Value){
         self.done(.success(value))
     }
-    
+    /// Issue a completion signal indicating that the Promise has been done with an error
+    /// It has no effect when repeated
+    ///
+    /// - Parameters:
+    ///    - error: done with the failure error result
+    public func done(_ error:Error){
+        self.done(.failure(error))
+    }
     /// It has no effect when repeated calls.
     /// - Parameters:
     ///    - result: done with the result
@@ -108,6 +70,10 @@ public final class Promise<Value:Sendable>: @unchecked Sendable{
             }
         }
     }
+    /// The promise has been done or not
+    public var isDone:Bool{
+        self.$result.read { $0 != nil }
+    }
     /// Add finish callback
     /// - Parameters:
     ///    - callback: done with the result
@@ -123,27 +89,8 @@ public final class Promise<Value:Sendable>: @unchecked Sendable{
         }
     }
 }
-
+//MARK: Core Methods
 extension Promise{
-    /// This is where all the call chains end up
-    ///
-    ///     let promise = Promise<Int>()
-    ///     promise.then{v in
-    ///         return v.map { other v }
-    ///     }.then{ v in
-    ///         print(v)
-    ///     }.finally{ result in
-    ///         print(result)
-    ///     }
-    ///
-    /// - Parameters:
-    ///   - handler: The  finally handler  after some  result returned. Both success and failure are included.
-    ///   It will been scheduled by the system `Task` scheduler. If you want to update the UI use `MainActor`
-    public func finally(_ handler:@escaping @Sendable (Result<Value,Error>)async ->Void ){
-        self.withFinish {
-            await handler(self.result!)
-        }
-    }
     /// Process success value or failure error after promise comleted
     ///
     ///     let promise = Promise<Int>()
@@ -340,6 +287,25 @@ extension Promise{
                     throw error
                 }
             }
+        }
+    }
+    /// This is where all the call chains end up
+    ///
+    ///     let promise = Promise<Int>()
+    ///     promise.then{v in
+    ///         return v.map { other v }
+    ///     }.then{ v in
+    ///         print(v)
+    ///     }.finally{ result in
+    ///         print(result)
+    ///     }
+    ///
+    /// - Parameters:
+    ///   - handler: The  finally handler  after some  result returned. Both success and failure are included.
+    ///   It will been scheduled by the system `Task` scheduler. If you want to update the UI use `MainActor`
+    public func finally(_ handler:@escaping @Sendable (Result<Value,Error>)async ->Void ){
+        self.withFinish {
+            await handler(self.result!)
         }
     }
     /// Wait for the promise to complete and return the  success value or throw an error
