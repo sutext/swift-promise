@@ -330,9 +330,9 @@ extension Promise{
     ///
     @discardableResult
     public func wait() async throws -> Value{
-        return try await withUnsafeThrowingContinuation { cont in
+        try await withUnsafeThrowingContinuation { con in
             self.finally { r in
-                cont.resume(with: r)
+                con.resume(with: r)
             }
         }
     }

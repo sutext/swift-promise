@@ -68,6 +68,33 @@ let package = Package(
     print("value:",v)
 
 ```
+### Perform async opration and update UI Interface
+```swift
+
+import UIKit
+import Promise
+
+class ViewController:UIViewController{
+    override func viewDidLoad(){
+        super.viewDidLoad()
+        requestData().then{
+            try await self.updateUI($0)
+        }
+    }
+    func requestData()->Promise<Data>{
+        Promise{done
+            DispatchQueue.global().async{
+                ///got network data
+                done(.success(data))
+            }
+        }
+    }
+    @MainActor func updateUI(_ data:Data){
+    
+    }
+}
+
+```
 
 ### Simulate a sequential request network
 
@@ -111,7 +138,7 @@ let package = Package(
     print("value:",v)
     assert(v == 103)
 
-    let values = try await PromiseAll(request0(), request0(), request0(), request0(), request0(),queue: .main).wait()
+    let values = try await Promises(request0(), request0(), request0(), request0(), request0(),queue: .main).wait()
     print(values)
     assert(values == (100,100,100,100,100))
 

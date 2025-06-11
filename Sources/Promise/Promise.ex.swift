@@ -34,13 +34,12 @@ extension Promise{
     ///     print(value)
     ///
     /// - Parameters:
-    ///    - initializer: The init func which well be call immediately
+    ///    - initializer: The init func which well be call asynchronous  immediately
     public convenience init(initializer:@escaping @Sendable () async throws -> Value){
         self.init()
         Task{
             do {
-                let v = try await initializer()
-                self.done(v)
+                self.done(try await initializer())
             }catch{
                 self.done(error)
             }
@@ -72,7 +71,7 @@ extension Promise{
     ///     print(value)
     ///
     /// - Parameters:
-    ///    - initializer: The init func which well be call immediately
+    ///    - initializer: The init func which well be call asynchronous immediately
     public convenience init(initializer:@escaping @Sendable (@escaping @Sendable (Result<Value,Error>) -> Void) async throws -> Void){
         self.init()
         Task{
@@ -83,185 +82,54 @@ extension Promise{
             }
         }
     }
-    /// Create a new promise from the existing promise list, which will wait until all the promises are complete
-    /// All children promises are executed concurrently
-    /// - Parameters:
-    ///   - p1:The first promise
-    ///   - p2:The second promise
-    public convenience init<V1,V2>(_ p1:Promise<V1>, _ p2:Promise<V2>) where Value == (V1,V2){
-        self.init()
-        Task{
-            do{
-                let v1 = try await p1.wait()
-                let v2 = try await p2.wait()
-                self.done((v1,v2))
-                
-            }catch{
-                self.done(error)
-            }
-        }
+}
+/// Create a new promise from the existing promise tuple, which will wait until all the promises are complete
+/// All children promises are executed concurrently
+///
+///     @Sendable func request(_ value:Int)->Promise<Int>{
+///         Promise{ done in
+///             DispatchQueue(label: "async task").asyncAfter(deadline: .now()+0.5){
+///                 done(.success(value))
+///             }
+///         }
+///     }
+///     let p1 = request(1)
+///     let p2 = reqiest(2)
+///     let p3 = request(3)
+///     let values = try await Promises(p1,p2,p3).wait() // tuple value (1,2,3)
+///
+/// - Parameters:
+///   - ps:The promses
+/// - Returns: Promise of tuple value
+public func Promises<each Value>(_ ps:repeat Promise<each Value>)->Promise<(repeat each Value)>{
+    Promise{
+        (repeat try await (each ps).wait())
     }
-    /// Create a new promise from the existing promise list, which will wait until all the promises are complete
-    /// All children promises are executed concurrently
-    /// - Parameters:
-    ///   - p1:The first promise
-    ///   - p2:The second promise and so on ...
-    ///   - p3:The third promise and so on ...
-    public convenience init<V1,V2,V3>(_ p1:Promise<V1>, _ p2:Promise<V2>,_ p3:Promise<V3>) where Value == (V1,V2,V3){
-        self.init()
-        Task{
-            do{
-                let v1 = try await p1.wait()
-                let v2 = try await p2.wait()
-                let v3 = try await p3.wait()
-                self.done((v1,v2,v3))
-            }catch{
-                self.done(error)
-            }
+}
+/// Create a new promise from the existing promise array, which will wait until all the promises are complete
+/// All children promises are executed concurrently
+///
+///     @Sendable func request(_ value:Int)->Promise<Int>{
+///         Promise{ done in
+///             DispatchQueue(label: "async task").asyncAfter(deadline: .now()+0.5){
+///                 done(.success(value))
+///             }
+///         }
+///     }
+///     let p1 = request(1)
+///     let p2 = reqiest(2)
+///     let p3 = request(3)
+///     let values = try await Promises([p1,p2,p3]).wait() // array value [1,2,3]
+////// - Parameters:
+///   - ps:The promse array
+/// - Returns: Promise of array value
+public func Promises<Value>(_ ps:[Promise<Value>])->Promise<[Value]>{
+    Promise{
+        var values:[Value] = []
+        for p in ps {
+            let v = try await p.wait()
+            values.append(v)
         }
-    }
-    /// Create a new promise from the existing promise list, which will wait until all the promises are complete
-    /// All children promises are executed concurrently
-    /// - Parameters:
-    ///   - p1:The first promise
-    ///   - p2:The second promise
-    ///   - p3:The third promise and so on ...
-    public convenience init<V1,V2,V3,V4>(
-        _ p1:Promise<V1>,
-        _ p2:Promise<V2>,
-        _ p3:Promise<V3>,
-        _ p4:Promise<V4>)where Value == (V1,V2,V3,V4){
-        self.init()
-        Task{
-            do{
-                let v1 = try await p1.wait()
-                let v2 = try await p2.wait()
-                let v3 = try await p3.wait()
-                let v4 = try await p4.wait()
-                self.done((v1,v2,v3,v4))
-            }catch{
-                self.done(error)
-            }
-        }
-    }
-
-    /// Create a new promise from the existing promise list, which will wait until all the promises are complete
-    /// All children promises are executed concurrently
-    /// - Parameters:
-    ///   - p1:The first promise
-    ///   - p2:The second promise
-    ///   - p3:The third promise and so on ...
-    public convenience init<V1,V2,V3,V4,V5>(
-        _ p1:Promise<V1>,
-        _ p2:Promise<V2>,
-        _ p3:Promise<V3>,
-        _ p4:Promise<V4>,
-        _ p5:Promise<V5>)where Value == (V1,V2,V3,V4,V5){
-        self.init()
-        Task{
-            do{
-                let v1 = try await p1.wait()
-                let v2 = try await p2.wait()
-                let v3 = try await p3.wait()
-                let v4 = try await p4.wait()
-                let v5 = try await p5.wait()
-                self.done((v1,v2,v3,v4,v5))
-            }catch{
-                self.done(error)
-            }
-        }
-    }
-
-    /// Create a new promise from the existing promise list, which will wait until all the promises are complete
-    /// All children promises are executed concurrently
-    /// - Parameters:
-    ///   - p1:The first promise
-    ///   - p2:The second promise
-    ///   - p3:The third promise and so on ...
-    public convenience init<V1,V2,V3,V4,V5,V6>(
-        _ p1:Promise<V1>,
-        _ p2:Promise<V2>,
-        _ p3:Promise<V3>,
-        _ p4:Promise<V4>,
-        _ p5:Promise<V5>,
-        _ p6:Promise<V6>)where Value == (V1,V2,V3,V4,V5,V6){
-        self.init()
-        Task{
-            do{
-                let v1 = try await p1.wait()
-                let v2 = try await p2.wait()
-                let v3 = try await p3.wait()
-                let v4 = try await p4.wait()
-                let v5 = try await p5.wait()
-                let v6 = try await p6.wait()
-                self.done((v1,v2,v3,v4,v5,v6))
-            }catch{
-                self.done(error)
-            }
-        }
-    }
-
-    /// Create a new promise from the existing promise list, which will wait until all the promises are complete
-    /// All children promises are executed concurrently
-    /// - Parameters:
-    ///   - p1:The first promise
-    ///   - p2:The second promise
-    ///   - p3:The third promise and so on ...
-    public convenience init<V1,V2,V3,V4,V5,V6,V7>(
-        _ p1:Promise<V1>,
-        _ p2:Promise<V2>,
-        _ p3:Promise<V3>,
-        _ p4:Promise<V4>,
-        _ p5:Promise<V5>,
-        _ p6:Promise<V6>,
-        _ p7:Promise<V7>)where Value == (V1,V2,V3,V4,V5,V6,V7){
-        self.init()
-        Task{
-            do{
-                let v1 = try await p1.wait()
-                let v2 = try await p2.wait()
-                let v3 = try await p3.wait()
-                let v4 = try await p4.wait()
-                let v5 = try await p5.wait()
-                let v6 = try await p6.wait()
-                let v7 = try await p7.wait()
-                self.done((v1,v2,v3,v4,v5,v6,v7))
-            }catch{
-                self.done(error)
-            }
-        }
-    }
-
-    /// Create a new promise from the existing promise list, which will wait until all the promises are complete
-    /// All children promises are executed concurrently
-    /// - Parameters:
-    ///   - p1:The first promise
-    ///   - p2:The second promise
-    ///   - p3:The third promise and so on ...
-    public convenience init<V1,V2,V3,V4,V5,V6,V7,V8>(
-        _ p1:Promise<V1>,
-        _ p2:Promise<V2>,
-        _ p3:Promise<V3>,
-        _ p4:Promise<V4>,
-        _ p5:Promise<V5>,
-        _ p6:Promise<V6>,
-        _ p7:Promise<V7>,
-        _ p8:Promise<V8>)where Value == (V1,V2,V3,V4,V5,V6,V7,V8){
-        self.init()
-        Task{
-            do{
-                let v1 = try await p1.wait()
-                let v2 = try await p2.wait()
-                let v3 = try await p3.wait()
-                let v4 = try await p4.wait()
-                let v5 = try await p5.wait()
-                let v6 = try await p6.wait()
-                let v7 = try await p7.wait()
-                let v8 = try await p8.wait()
-                self.done((v1,v2,v3,v4,v5,v6,v7,v8))
-            }catch{
-                self.done(error)
-            }
-        }
+        return values
     }
 }

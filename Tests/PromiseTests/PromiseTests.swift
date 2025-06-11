@@ -8,7 +8,7 @@ enum E:Error{
 }
 
 @Test func test1() async throws {
-    let t1:TimeInterval = Date.now.timeIntervalSince1970
+    let t1:TimeInterval = Date().timeIntervalSince1970
     let p = Promise<Int>(4)
         .then { i in
             if i%2 == 0{
@@ -52,7 +52,7 @@ enum E:Error{
             return 100
         }
     let v = try await p.wait()
-    let t2:TimeInterval = Date.now.timeIntervalSince1970
+    let t2:TimeInterval = Date().timeIntervalSince1970
     print("value:",v,"cost:",(t2-t1))
     assert(p.isDone)
     assert(v == 100)
@@ -76,7 +76,6 @@ enum E:Error{
             done(.success(207))
         }
     }
-    
     promise.then { i in
         return i * i
     }.then { i in
@@ -165,8 +164,9 @@ func asyncFunc(fun: ()->Void){
         let v5 = try await request0().wait()
         return (v1,v2,v3,v4,v5)
     }
-    print(try await p2.wait()) // cost 5ss
-    let values = try await Promise(request0(), request0(), request0(), request0(), request0()).wait()
+    print(try await p2.wait()) // cost 5s
+    
+    let values = try await Promises(request0(), request0(), request0(), request0(), request0()).wait()
     print(values)
     assert(values == (100,100,100,100,100))//cost 0.5s
 }
@@ -176,31 +176,10 @@ func asyncFunc(fun: ()->Void){
     let p3 = request0()
     let p4 = request0()
     let p5 = request0()
-    let v1 = try await Promise{done in
-        let v1 =  try await p1.wait()
-        let v2 =  try await p2.wait()
-        let v3 =  try await p3.wait()
-        let v4 =  try await p4.wait()
-        let v5 =  try await p5.wait()
-        asyncFunc {
-            done(.success((v1,v2,v3,v4,v5)))
-        }
-    }.wait()
-    
-    print(v1)
-    let v2 = try await Promise{
-        let v1 =  try await p1.wait()
-        let v2 =  try await p2.wait()
-        let v3 =  try await p3.wait()
-        let v4 =  try await p4.wait()
-        let v5 =  try await p5.wait()
-        return (v1,v2,v3,v4,v5)
-    }.wait()
-    
-    print(v2)
-    let values = try await Promise(p1,p2,p3,p4,p5).wait()
-    print(values)
+    let values = try await Promises(p1,p2,p3,p4,p5).wait()
     assert(values == (100,100,100,100,100))//cost 0.5s
+    let vs = try await Promises([p1,p2,p3,p4,p5]).wait()
+    assert(vs == [100,100,100,100,100])//cost 0.5s
 }
 struct TestSafely{
     var v1:String
